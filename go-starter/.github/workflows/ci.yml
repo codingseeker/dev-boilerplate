@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+permissions:
+  contents: read
+
+env:
+  GOFLAGS: -mod=readonly
+
+jobs:
+  verify:
+    name: Verify (Go ${{ matrix.go-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ['1.25.x']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      - name: Verify modules
+        run: |
+          go mod verify
+          go mod tidy
+          git diff --exit-code -- go.mod
+          if [ -f go.sum ]; then git diff --exit-code -- go.sum; fi
+
+      - name: Format check
+        run: |
+          files=$(gofmt -s -l .)
+          if [ -n "$files" ]; then
+            echo "These files need gofmt:"
+            echo "$files"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.11.3
+
+      - name: Unit and integration tests
+        run: go test -count=1 ./...
+
+      - name: Race tests
+        run: go test -race -count=1 ./...
+
+      - name: Coverage
+        run: go test -count=1 -covermode=atomic -coverprofile=coverage.out ./...
+
+      - name: Build
+        run: |
+          go build ./...
+          CGO_ENABLED=0 go build -trimpath \
+            -ldflags "-s -w -X github.com/codingseeker/go-starter/internal/buildinfo.Version=${GITHUB_SHA}" \
+            -o bin/go-starter ./cmd/app
+          ./bin/go-starter version
+
+      - name: Smoke test the CLI
+        run: |
+          ./bin/go-starter --help
+          ./bin/go-starter version
+          if ./bin/go-starter serve --env=production --http-port=abc; then
+            echo "expected a non-zero exit code for invalid configuration"
+            exit 1
+          fi
+
+      - name: Dependency vulnerability scan
+        # Pinned so the scan stays reproducible; bump deliberately.
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          "$(go env GOPATH)/bin/govulncheck" ./...
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+          if-no-files-found: ignore

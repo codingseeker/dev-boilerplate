@@ -1,0 +1,42 @@
+# Binaries and build output
+bin/
+dist/
+go-starter
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.a
+*.o
+
+# Test binaries and coverage output
+*.test
+*.out
+coverage.out
+coverage.html
+profile.cov
+
+# Local environment files, never commit real configuration
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Go workspace files
+go.work
+go.work.sum
+
+# OS generated files
+.DS_Store
+Thumbs.db
